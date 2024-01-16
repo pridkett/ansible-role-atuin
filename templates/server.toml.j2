@@ -1,0 +1,9 @@
+port = {{ atuin_server_port }}
+open_registration = {{ atuin_server_open_registration }}
+
+{% if atuin_server_tls %}
+[tls]
+enable = true
+cert_path = "{{ atuin_server_cert_path }}"
+pkey_path = "{{ atuin_server_pkey_path }}"
+{% endif %}

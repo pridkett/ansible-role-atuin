@@ -1,0 +1,16 @@
+---
+galaxy_info:
+  author: Patrick Wagstrom
+  description: A simple role for installing atuin
+
+  license: MIT
+
+  min_ansible_version: 2.9
+  
+  platforms:
+    - name: MacOSX
+    - name: Ubuntu
+  
+  galaxy_tags: ["shell", "system", "atuin", "utilities"]
+
+dependencies: []

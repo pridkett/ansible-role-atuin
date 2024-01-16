@@ -1,0 +1,63 @@
+---
+- name: Install Atuin on macOS
+  block:
+    - name: Install Atuin using Homebrew
+      community.general.homebrew:
+        name: atuin
+        state: present
+        become: no
+  when: ansible_os_family == "Darwin"
+
+- name: Install Atuin on Linux x86/x86_64
+  block:
+    - name: Download Atuin install script
+      ansible.builtin.get_url:
+        url: https://raw.githubusercontent.com/ellie/atuin/main/install.sh
+        dest: /tmp/atuin_install.sh
+        mode: '0755'
+
+    - name: Run Atuin install script
+      ansible.builtin.shell: /tmp/atuin_install.sh
+  when: ansible_os_family == "Linux" and ansible_architecture in ["x86_64", "x86"]
+
+- name: Install Atuin on Raspberry Pi
+  block:
+    - name: Download Atuin binary for Raspberry Pi
+      ansible.builtin.get_url:
+        url: https://patrick.wagstrom.net/misc/atuin.raspberrypi
+        dest: /usr/local/bin/atuin
+        mode: '0755'
+      become: yes
+  when: ansible_architecture == "armv7l" or ansible_architecture == "aarch64"
+
+- name: Install and Build Atuin Server on ARMv7l
+  when: atuin_server_install | bool and ansible_architecture == "armv7l"
+  block:
+    - name: Clone atuin-server-docker repository
+      ansible.builtin.git:
+        repo: 'https://github.com/pridkett/atuin-server-docker.git'
+        dest: "{{ atuin_server_dir }}"
+        clone: yes
+        update: yes
+
+    - name: Copy server.toml.j2 to Atuin server config directory
+      ansible.builtin.template:
+        src: templates/server.toml.j2
+        dest: "{{ atuin_server_dir }}/config/server.toml"
+
+    - name: Copy dotenv.j2 to Atuin server directory as .env
+      ansible.builtin.template:
+        src: templates/dotenv.j2
+        dest: "{{ atuin_server_dir}}/.env"
+        
+    - name: Run docker-compose build in Atuin server directory
+      ansible.builtin.shell:
+        cmd: docker-compose build
+        chdir: "{{ atuin_server_dir }}"
+      when: atuin_server_build | bool
+
+    - name: Start docker-compose stack
+      ansible.builtin.shell:
+        cmd: docker-compose up -d
+        chdir: "{{ atuin_server_dir }}"
+      when: atuin_server_start | bool

@@ -10,3 +10,16 @@ atuin_server_cert_path: "{% if atuin.server_cert_path is defined%}{{atuin.server
 atuin_server_pkey_path: "{% if atuin.server_pkey_path is defined%}{{atuin.server_pkey_path}}{% endif %}"
 atuin_server_open_registration: "{% if atuin.server_open_registration is defined%}{{atuin.server_open_registration}}{% else %}false{% endif %}"
 atuin_server_tls: "{% if atuin.server_tls is defined%}{{atuin.server_tls}}{% else %}false{% endif %}"
+
+atuin_fish_install: "{% if atuin.fish_install is defined %}{{atuin.fish_install}}{% else %}false{% endif %}"
+atuin_fish_extra: "{% if atuin.fish_extra is defined %}{{atuin.fish_extra}}{% endif %}"
+atuin_fish_disable_ctrl_r: "{% if atuin.fish_disable_ctrl_r is defined and atuin.fish_disable_ctrl_r %}--disable-ctrl-r{% endif %}"
+atuin_fish_disable_up_arrow: "{% if atuin.fish_disable_up_arrow is defined and atuin.fish_disable_up_arrow %}--disable-up-arrow{% endif %}"
+
+atuin_sync_login: "{% if atuin.sync_login is defined %}{{ atuin.sync_login }}{% else %}false{% endif %}"
+atuin_sync_address: "{% if atuin.sync_address is defined %}{{ atuin.sync_address }}{% endif %}"
+atuin_sync_username: "{% if atuin.sync_username is defined %}{{ atuin.sync_username }}{% endif %}"
+# atuin_sync_password: "{% if atuin_sync_password is not defined and atuin.sync_password is defined %}{{ atuin.sync_password }}{% endif %}"
+atuin_sync_password_int: "{{ atuin_sync_password | default(atuin.sync_password, true) }}"
+atuin_sync_key_int: "{{ atuin_sync_key | default(atuin.sync_key, true) }}"
+# {% if atuin.sync_key is defined %}{{ atuin.sync_key }}{% endif %}"

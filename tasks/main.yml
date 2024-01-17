@@ -10,15 +10,36 @@
 
 - name: Install Atuin on Linux x86/x86_64
   block:
-    - name: Download Atuin install script
-      ansible.builtin.get_url:
-        url: https://raw.githubusercontent.com/ellie/atuin/main/install.sh
-        dest: /tmp/atuin_install.sh
-        mode: '0755'
+    - name: Check if /usr/local/bin/atuin exists
+      ansible.builtin.stat:
+        path: /usr/local/bin/atuin
+      register: atuin_stat
 
-    - name: Run Atuin install script
-      ansible.builtin.shell: /tmp/atuin_install.sh
-  when: ansible_os_family == "Linux" and ansible_architecture in ["x86_64", "x86"]
+    - name: Build and install atuin
+      block:
+        - name: Ensure cargo is installed
+          apt:
+            name: ['cargo']
+            state: present
+            update_cache: true
+          become: yes
+          tags: install
+
+        - name: Install atuin using cargo
+          ansible.builtin.command:
+            argv: ["cargo", "install", "atuin"]
+          tags: install
+      
+        - name: copy atuin binary to /usr/local/bin/atuin
+          ansible.builtin.copy:
+            src: ~/.cargo/bin/atuin
+            dest: /usr/local/bin/atuin
+            mode: '0755'
+          become: yes
+
+      when: not atuin_stat.stat.exists
+
+  when: ansible_os_family in ["Linux", "Debian"] and ansible_architecture in ["x86_64", "x86"] and ansible_pkg_mgr == "apt"
 
 - name: Install Atuin on Raspberry Pi
   block:
@@ -30,6 +51,79 @@
       become: yes
   when: ansible_architecture == "armv7l" or ansible_architecture == "aarch64"
 
+- name: Install Atuin fish scripts
+  block:
+    - name: install templated atuin.fish
+      ansible.builtin.template:
+        src: templates/atuin.fish.j2
+        dest: "{{ ansible_env.HOME }}/.config/fish/fish.d/atuin.fish"
+  when: atuin_fish_install | bool
+
+- name: Invoke atuin to ensure there is a configuration file
+  ansible.builtin.shell:
+    cmd: atuin default-config
+
+- name: Ensure sync_address is correctly set in atuin/config.toml
+  ansible.builtin.lineinfile:
+    path: "{{ ansible_env.HOME }}/.config/atuin/config.toml"
+    regexp: '^\s*sync_address\s*='
+    line: "sync_address = \"{{ atuin_sync_address }}\""
+    backrefs: yes
+    state: present
+  when: atuin_sync_address is defined and atuin_sync_address | length > 0
+
+- name: Double ensure sync_address is correctly set in atuin/config.toml
+  ansible.builtin.lineinfile:
+    path: "{{ ansible_env.HOME }}/.config/atuin/config.toml"
+    line: "sync_address = \"{{ atuin_sync_address }}\""
+    state: present
+  when: atuin_sync_address is defined and atuin_sync_address | length > 0
+
+- name: Display Atuin Sync Login
+  ansible.builtin.debug:
+    msg: "Atuin Sync Login: {{ atuin_sync_login | default('Undefined') }}"
+
+- name: Display Atuin Sync Username
+  ansible.builtin.debug:
+    msg: "Atuin Sync Username: {{ atuin_sync_username | default('Undefined') }}"
+    
+- name: Display Atuin Sync Password
+  ansible.builtin.debug:
+    msg: "Atuin Sync Password: {{ atuin_sync_password_int | default('Undefined') }}"
+
+- name: Display Atuin Sync Address
+  ansible.builtin.debug:
+    msg: "Atuin Sync Address: {{ atuin_sync_address | default('Undefined') }}"
+
+- name: Display Atuin Sync Address
+  ansible.builtin.debug:
+    msg: "Atuin.Sync_Address: {{ atuin.sync_address | default('Undefined') }}"
+
+- name: Display atuin_sync_int
+  ansible.builtin.debug:
+    msg: "atuin_sync_key_int: {{ atuin_sync_key_int | default('Undefined') }}"
+
+- name: Display atuin_sync_key
+  ansible.builtin.debug:
+    msg: "atuin_sync_key: {{ atuin_sync_key | default('Undefined') }}"
+
+- name: Display atuin.sync_key
+  ansible.builtin.debug:
+    msg: "atuin.sync_key: {{ atuin.sync_key | default('Undefined') }}"
+        
+- name: Set up synchornization
+  ansible.builtin.command:
+    argv:
+      - "atuin"
+      - "login"
+      - "-u"
+      - "{{ atuin_sync_username }}"
+      - "-p"
+      - "{{ atuin_sync_password_int }}"
+      - "-k"
+      - "{{ atuin_sync_key_int }}"
+  when: atuin_sync_login | bool and atuin_sync_username | length > 0 and atuin_sync_password_int | length > 0 and atuin_sync_key_int | length > 0
+  
 - name: Install and Build Atuin Server on ARMv7l
   when: atuin_server_install | bool and ansible_architecture == "armv7l"
   block:

@@ -43,20 +43,76 @@
 
 - name: Install Atuin on Raspberry Pi
   block:
-    - name: Download Atuin binary for Raspberry Pi
-      ansible.builtin.get_url:
-        url: https://patrick.wagstrom.net/misc/atuin.raspberrypi
-        dest: /usr/local/bin/atuin
-        mode: '0755'
-      become: yes
+    - name: Check if /usr/local/bin/atuin exists
+      stat:
+        path: /usr/local/bin/atuin
+      register: atuin_file
+
+    - name: Get atuin version if file exists
+      command: atuin --version
+      register: atuin_current_version
+      when: atuin_file.stat.exists
+      ignore_errors: yes
+
+    - name: Set need_download based on atuin version and existence
+      set_fact:
+        need_download: "{{ not atuin_file.stat.exists or ('atuin ' + atuin_version) not in atuin_current_version.stdout }}"
+      when: atuin_file.stat.exists
+      
+    - name: Set need_download to true if /usr/local/bin/atuin does not exist
+      set_fact:
+        need_download: true
+      when: not atuin_file.stat.exists
+
+    - name: Conditionally download atuin binary
+      block:
+        - name: Fetch atuin versions info
+          uri:
+            url: "https://patrick.wagstrom.net/misc/atuin_versions.json"
+            return_content: yes
+            method: GET
+          register: atuin_versions_info
+      
+        - name: Parse and set the file name to download
+          set_fact:
+            atuin_binary_filename: "{{ (atuin_versions_info.json[ansible_architecture].versions[atuin_version]) }}"
+
+        - name: Output the file to download
+          debug:
+            msg: "The file to download is {{ atuin_binary_filename }}"
+
+        - name: Download and install atuin binary to /usr/local/bin/atuin
+          get_url:
+            url: "https://patrick.wagstrom.net/misc/{{ atuin_binary_filename }}"
+            dest: "/usr/local/bin/atuin"
+            mode: '0755'
+          become: yes
+      when: need_download | bool
+        
+
   when: ansible_architecture == "armv7l" or ansible_architecture == "aarch64"
 
-- name: Install Atuin fish scripts
+- name: Install support for fish shell
   block:
-    - name: install templated atuin.fish
+    - name: Ensure the fish.d directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/.config/fish/fish.d"
+        state: directory
+        mode: '0755'  # Optional: Set the permissions of the directory
+
+    - name: Install Atuin fish scripts
+      block:
+        - name: install templated atuin.fish
+          ansible.builtin.template:
+            src: templates/atuin.fish.j2
+            dest: "{{ ansible_env.HOME }}/.config/fish/fish.d/atuin.fish"
+
+    - name: Fix atuin hostname
       ansible.builtin.template:
-        src: templates/atuin.fish.j2
-        dest: "{{ ansible_env.HOME }}/.config/fish/fish.d/atuin.fish"
+        src: templates/atuin_hostname.fish.j2
+        dest: "{{ ansible_env.HOME }}/.config/fish/fish.d/atuin_hostname.fish"
+      when: atuin_hostname_fix | bool
+      
   when: atuin_fish_install | bool
 
 - name: Invoke atuin to ensure there is a configuration file
@@ -79,37 +135,37 @@
     state: present
   when: atuin_sync_address is defined and atuin_sync_address | length > 0
 
-- name: Display Atuin Sync Login
-  ansible.builtin.debug:
-    msg: "Atuin Sync Login: {{ atuin_sync_login | default('Undefined') }}"
+# - name: Display Atuin Sync Login
+#   ansible.builtin.debug:
+#     msg: "Atuin Sync Login: {{ atuin_sync_login | default('Undefined') }}"
 
-- name: Display Atuin Sync Username
-  ansible.builtin.debug:
-    msg: "Atuin Sync Username: {{ atuin_sync_username | default('Undefined') }}"
+# - name: Display Atuin Sync Username
+#   ansible.builtin.debug:
+#     msg: "Atuin Sync Username: {{ atuin_sync_username | default('Undefined') }}"
     
-- name: Display Atuin Sync Password
-  ansible.builtin.debug:
-    msg: "Atuin Sync Password: {{ atuin_sync_password_int | default('Undefined') }}"
+# - name: Display Atuin Sync Password
+#   ansible.builtin.debug:
+#     msg: "Atuin Sync Password: {{ atuin_sync_password_int | default('Undefined') }}"
 
-- name: Display Atuin Sync Address
-  ansible.builtin.debug:
-    msg: "Atuin Sync Address: {{ atuin_sync_address | default('Undefined') }}"
+# - name: Display Atuin Sync Address
+#   ansible.builtin.debug:
+#     msg: "Atuin Sync Address: {{ atuin_sync_address | default('Undefined') }}"
 
-- name: Display Atuin Sync Address
-  ansible.builtin.debug:
-    msg: "Atuin.Sync_Address: {{ atuin.sync_address | default('Undefined') }}"
+# - name: Display Atuin Sync Address
+#   ansible.builtin.debug:
+#     msg: "Atuin.Sync_Address: {{ atuin.sync_address | default('Undefined') }}"
 
-- name: Display atuin_sync_int
-  ansible.builtin.debug:
-    msg: "atuin_sync_key_int: {{ atuin_sync_key_int | default('Undefined') }}"
+# - name: Display atuin_sync_int
+#   ansible.builtin.debug:
+#     msg: "atuin_sync_key_int: {{ atuin_sync_key_int | default('Undefined') }}"
 
-- name: Display atuin_sync_key
-  ansible.builtin.debug:
-    msg: "atuin_sync_key: {{ atuin_sync_key | default('Undefined') }}"
+# - name: Display atuin_sync_key
+#   ansible.builtin.debug:
+#     msg: "atuin_sync_key: {{ atuin_sync_key | default('Undefined') }}"
 
-- name: Display atuin.sync_key
-  ansible.builtin.debug:
-    msg: "atuin.sync_key: {{ atuin.sync_key | default('Undefined') }}"
+# - name: Display atuin.sync_key
+#   ansible.builtin.debug:
+#     msg: "atuin.sync_key: {{ atuin.sync_key | default('Undefined') }}"
         
 - name: Set up synchornization
   ansible.builtin.command:

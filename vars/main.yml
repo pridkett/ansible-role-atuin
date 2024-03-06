@@ -16,6 +16,10 @@ atuin_fish_extra: "{% if atuin.fish_extra is defined %}{{atuin.fish_extra}}{% en
 atuin_fish_disable_ctrl_r: "{% if atuin.fish_disable_ctrl_r is defined and atuin.fish_disable_ctrl_r %}--disable-ctrl-r{% endif %}"
 atuin_fish_disable_up_arrow: "{% if atuin.fish_disable_up_arrow is defined and atuin.fish_disable_up_arrow %}--disable-up-arrow{% endif %}"
 
+# gets set if we install helper scripts to fix the hostname based on the inventory hostname
+atuin_hostname_fix: "{% if atuin.hostname_fix is defined %}{{atuin.hostname_fix}}{% else %}false{% endif %}"
+atuin_hostname: "{% if atuin.hostname is defined %}{{atuin.hostname}}{% else %}{{inventory_hostname}}{% endif %}"
+
 atuin_sync_login: "{% if atuin.sync_login is defined %}{{ atuin.sync_login }}{% else %}false{% endif %}"
 atuin_sync_address: "{% if atuin.sync_address is defined %}{{ atuin.sync_address }}{% endif %}"
 atuin_sync_username: "{% if atuin.sync_username is defined %}{{ atuin.sync_username }}{% endif %}"
@@ -23,3 +27,5 @@ atuin_sync_username: "{% if atuin.sync_username is defined %}{{ atuin.sync_usern
 atuin_sync_password_int: "{{ atuin_sync_password | default(atuin.sync_password, true) }}"
 atuin_sync_key_int: "{{ atuin_sync_key | default(atuin.sync_key, true) }}"
 # {% if atuin.sync_key is defined %}{{ atuin.sync_key }}{% endif %}"
+
+atuin_version: "18.0.2"

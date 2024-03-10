@@ -8,39 +8,68 @@
         become: no
   when: ansible_os_family == "Darwin"
 
+- name: Register version of curently installed copy of atuin
+  block:
+    - name: Execute atuin to get its version
+      command: atuin --version
+      register: atuin_version_output
+      ignore_errors: yes
+      failed_when: false
+
+    - name: Set atuin_installed_version variable
+      set_fact:
+        atuin_installed_version: "{{ atuin_version_output.stdout | default('') }}"
+      when: atuin_version_output.rc == 0
+
+    - name: Set atuin_installed_version variable as empty when command fails
+      set_fact:
+        atuin_installed_version: ""
+      when: atuin_version_output.rc != 0
+
+    - name: Set need_download based on atuin_installed_version
+      set_fact:
+        need_download: "{{ ('atuin ' + atuin_version) not in atuin_installed_version }}"
+
+    - name: Debug atuin_installed_version
+      debug:
+        msg: "atuin_installed_version is '{{ atuin_installed_version }}'."
+
+    - name: Debug need_download
+      debug:
+        msg: "need_download is '{{ need_download }}'."
+  when: ansible_os_family != 'Darwin'
+        
 - name: Install Atuin on Linux x86/x86_64
   block:
-    - name: Check if /usr/local/bin/atuin exists
-      ansible.builtin.stat:
+    - name: Ensure cargo is installed
+      apt:
+        name: ['cargo']
+        state: present
+        update_cache: true
+      become: yes
+      tags: install
+
+    - name: Install atuin using cargo
+      ansible.builtin.command:
+        argv: ["cargo", "install", "atuin", "--version", "{{ atuin_version }}"]
+      tags: install
+  
+    - name: copy atuin binary to /usr/local/bin/atuin
+      ansible.builtin.command:
+        argv: ["cp", "{{ ansible_env.HOME }}/.cargo/bin/atuin", "/usr/local/bin/atuin"]
+      tags: install
+      become: yes
+
+    - name: Set the permissions on the copied file
+      ansible.builtin.file:
         path: /usr/local/bin/atuin
-      register: atuin_stat
+        owner: root
+        group: root
+        mode: '0755'
+      become: yes
 
-    - name: Build and install atuin
-      block:
-        - name: Ensure cargo is installed
-          apt:
-            name: ['cargo']
-            state: present
-            update_cache: true
-          become: yes
-          tags: install
-
-        - name: Install atuin using cargo
-          ansible.builtin.command:
-            argv: ["cargo", "install", "atuin"]
-          tags: install
-      
-        - name: copy atuin binary to /usr/local/bin/atuin
-          ansible.builtin.copy:
-            src: ~/.cargo/bin/atuin
-            dest: /usr/local/bin/atuin
-            mode: '0755'
-          become: yes
-
-      when: not atuin_stat.stat.exists
-
-  when: ansible_os_family in ["Linux", "Debian"] and ansible_architecture in ["x86_64", "x86"] and ansible_pkg_mgr == "apt"
-
+  when: need_download and ansible_os_family in ["Linux", "Debian"] and ansible_architecture in ["x86_64", "x86"] and ansible_pkg_mgr == "apt"
+  
 - name: Install Atuin on Raspberry Pi
   block:
     - name: Check if /usr/local/bin/atuin exists

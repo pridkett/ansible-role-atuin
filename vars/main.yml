@@ -28,4 +28,4 @@ atuin_sync_password_int: "{{ atuin_sync_password | default(atuin.sync_password, 
 atuin_sync_key_int: "{{ atuin_sync_key | default(atuin.sync_key, true) }}"
 # {% if atuin.sync_key is defined %}{{ atuin.sync_key }}{% endif %}"
 
-atuin_version: "18.1.0"
+atuin_version: "18.4.0"

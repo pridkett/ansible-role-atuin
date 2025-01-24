@@ -80,7 +80,7 @@
       command: atuin --version
       register: atuin_current_version
       when: atuin_file.stat.exists
-      ignore_errors: yes
+      ignore_errors: true
 
     - name: Set need_download based on atuin version and existence
       set_fact:
@@ -114,7 +114,7 @@
             url: "https://patrick.wagstrom.net/misc/{{ atuin_binary_filename }}"
             dest: "/usr/local/bin/atuin"
             mode: '0755'
-          become: yes
+          become: true
       when: need_download | bool
         
 
@@ -150,7 +150,7 @@
 - name: Ensure sync_address is correctly set in atuin/config.toml
   ansible.builtin.lineinfile:
     path: "{{ ansible_env.HOME }}/.config/atuin/config.toml"
-    regexp: '^\s*sync_address\s*='
+    regexp: '^#?\s*sync_address\s*='
     line: "sync_address = \"{{ atuin_sync_address }}\""
     backrefs: yes
     state: present

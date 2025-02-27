@@ -26,6 +26,7 @@
   when: ansible_facts['os_family'] != 'Darwin'
 
 - name: Attempt to install Atuin with shell script
+  when: (need_download | default(False)) | bool and ansible_facts['os_family'] != 'Darwin'
   block:
     - name: Download the Atuin install script
       get_url:

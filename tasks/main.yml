@@ -80,7 +80,7 @@
         mode: '0755'
       become: true
 
-  when: atuin_install_successful is defined and atuin_install_successful.failed and (ansible_facts['architecture'] == "armv7l" or ansible_facts['architecture'] == "aarch64")
+  when: atuin_install_successful is defined and (atuin_install_successful.failed | default(False)) | bool and (ansible_facts['architecture'] == "armv7l" or ansible_facts['architecture'] == "aarch64")
 
 - name: Debug atuin_install_successful
   ansible.builtin.debug:

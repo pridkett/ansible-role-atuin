@@ -1,124 +1,178 @@
 ---
+- name: Display ansible_facts
+  ansible.builtin.debug:
+    var: ansible_facts
 - name: Install Atuin on macOS
   block:
     - name: Install Atuin using Homebrew
       community.general.homebrew:
         name: atuin
         state: present
-  when: ansible_os_family == "Darwin"
+  when: ansible_facts['os_family'] == "Darwin"
 
 - name: Register version of curently installed copy of atuin
   block:
     - name: Execute atuin to get its version
       command: atuin --version
       register: atuin_version_output
-      ignore_errors: yes
+      ignore_errors: true
       failed_when: false
 
     - name: Set atuin_installed_version variable
       set_fact:
-        atuin_installed_version: "{{ atuin_version_output.stdout | default('') }}"
+          atuin_installed_version: "{{ atuin_version_output.stdout.split()[1].strip() if atuin_version_output.stdout else '' }}"
       when: atuin_version_output.rc == 0
-
-    - name: Set atuin_installed_version variable as empty when command fails
-      set_fact:
-        atuin_installed_version: ""
-      when: atuin_version_output.rc != 0
 
     - name: Set need_download based on atuin_installed_version
       set_fact:
-        need_download: "{{ ('atuin ' + atuin_version) not in atuin_installed_version }}"
+        need_download: "{{ atuin_version_output.rc != 0 or atuin_installed_version is version(atuin_version, '<') }}"
 
-    - name: Debug atuin_installed_version
-      debug:
-        msg: "atuin_installed_version is '{{ atuin_installed_version }}'."
+  when: ansible['os_family'] != 'Darwin'
 
-    - name: Debug need_download
-      debug:
-        msg: "need_download is '{{ need_download }}'."
-  when: ansible_os_family != 'Darwin'
-        
-- name: Install Atuin on Linux x86/x86_64
+- name: Attempt to install Atuin with shell script
   block:
-    - name: Ensure cargo is installed
-      apt:
-        name: ['cargo']
-        state: present
-        update_cache: true
-      become: yes
-      tags: install
-
-    - name: Install atuin using cargo
-      ansible.builtin.command:
-        argv: ["cargo", "install", "atuin", "--version", "{{ atuin_version }}"]
-      tags: install
-  
-    - name: copy atuin binary to /usr/local/bin/atuin
-      ansible.builtin.command:
-        argv: ["cp", "{{ ansible_env.HOME }}/.cargo/bin/atuin", "/usr/local/bin/atuin"]
-      tags: install
-      become: yes
-
-    - name: Set the permissions on the copied file
-      ansible.builtin.file:
-        path: /usr/local/bin/atuin
-        owner: root
-        group: root
+    - name: Download the Atuin install script
+      get_url:
+        url: "https://github.com/atuinsh/atuin/releases/download/v18.4.0/atuin-installer.sh"
+        dest: "/tmp/atuin-install.sh"
         mode: '0755'
-      become: yes
 
-  when: ansible_os_family in ["Linux", "Debian"] and ansible_architecture in ["x86_64", "x86"] and ansible_pkg_mgr == "apt" and need_download
-  
+    - name: Run the Atuin install script
+      ansible.builtin.shell:
+        cmd: "/tmp/atuin-install.sh"
+      register: atuin_install_successful
+      ignore_errors: true
+      tags: install
+
+    - name: Copy atuin binary to /usr/local/bin/atuin
+      ansible.builtin.copy:
+        remote_src: true
+        src: "{{ ansible_env.HOME }}/.atuin/bin/atuin"
+        dest: "/usr/local/bin/atuin"
+        mode: '0755'
+      become: true
+      when: atuin_install_successful is defined and not atuin_install_successful.failed
+
+    - name: Remove {{ ansible_env.HOME }}/.atuin/bin/atuin binary
+      ansible.builtin.file:
+        path: "{{ ansible_env.HOME }}/.atuin/bin/atuin"
+        state: absent
+      when: atuin_install_successful is defined and not atuin_install_successful.failed
+
+- name: Debug atuin_install_successful
+  ansible.builtin.debug:
+    var: atuin_install_successful
+
 - name: Install Atuin on Raspberry Pi
   block:
-    - name: Check if /usr/local/bin/atuin exists
-      stat:
-        path: /usr/local/bin/atuin
-      register: atuin_file
-
-    - name: Get atuin version if file exists
-      command: atuin --version
-      register: atuin_current_version
-      when: atuin_file.stat.exists
-      ignore_errors: true
-
-    - name: Set need_download based on atuin version and existence
+    - name: Fetch atuin versions info
+      uri:
+        url: "https://patrick.wagstrom.net/misc/atuin_versions.json"
+        return_content: yes
+        method: GET
+      register: atuin_versions_info
+    
+    - name: Parse and set the file name to download
       set_fact:
-        need_download: "{{ not atuin_file.stat.exists or ('atuin ' + atuin_version) not in atuin_current_version.stdout }}"
-      when: atuin_file.stat.exists
+        atuin_binary_filename: "{{ (atuin_versions_info.json[ansible_architecture].versions[atuin_version]) }}"
+
+    - name: Download and install atuin binary to /usr/local/bin/atuin
+      get_url:
+        url: "https://patrick.wagstrom.net/misc/{{ atuin_binary_filename }}"
+        dest: "/usr/local/bin/atuin"
+        mode: '0755'
+      become: true
+
+  when: atuin_install_successful is defined and atuin_install_successful.failed and (ansible_facts['architecture'] == "armv7l" or ansible_facts['architecture'] == "aarch64")
+
+- name: Debug atuin_install_successful
+  ansible.builtin.debug:
+    var: atuin_install_successful
+    
+- name: Fail out if install was unsuccessful
+  fail:
+    msg: "Atuin installation was unsuccessful"
+  when: atuin_install_successful is defined and atuin_install_successful.failed
+
+# - name: Install Atuin on Linux x86/x86_64
+#   block:
+#     - name: Ensure cargo is installed
+#       apt:
+#         name: ['cargo']
+#         state: present
+#         update_cache: true
+#       become: yes
+#       tags: install
+
+#     - name: Install atuin using cargo
+#       ansible.builtin.command:
+#         argv: ["cargo", "install", "atuin", "--version", "{{ atuin_version }}"]
+#       tags: install
+  
+#     - name: copy atuin binary to /usr/local/bin/atuin
+#       ansible.builtin.command:
+#         argv: ["cp", "{{ ansible_env.HOME }}/.cargo/bin/atuin", "/usr/local/bin/atuin"]
+#       tags: install
+#       become: yes
+
+#     - name: Set the permissions on the copied file
+#       ansible.builtin.file:
+#         path: /usr/local/bin/atuin
+#         owner: root
+#         group: root
+#         mode: '0755'
+#       become: yes
+
+#   when: ansible_os_family in ["Linux", "Debian"] and ansible_architecture in ["x86_64", "x86"] and ansible_pkg_mgr == "apt" and need_download
+  
+# - name: Install Atuin on Raspberry Pi
+#   block:
+#     - name: Check if /usr/local/bin/atuin exists
+#       stat:
+#         path: /usr/local/bin/atuin
+#       register: atuin_file
+
+#     - name: Get atuin version if file exists
+#       command: atuin --version
+#       register: atuin_current_version
+#       when: atuin_file.stat.exists
+#       ignore_errors: true
+
+#     - name: Set need_download based on atuin version and existence
+#       set_fact:
+#         need_download: "{{ not atuin_file.stat.exists or ('atuin ' + atuin_version) not in atuin_current_version.stdout }}"
+#       when: atuin_file.stat.exists
       
-    - name: Set need_download to true if /usr/local/bin/atuin does not exist
-      set_fact:
-        need_download: true
-      when: not atuin_file.stat.exists
+#     - name: Set need_download to true if /usr/local/bin/atuin does not exist
+#       set_fact:
+#         need_download: true
+#       when: not atuin_file.stat.exists
 
-    - name: Conditionally download atuin binary
-      block:
-        - name: Fetch atuin versions info
-          uri:
-            url: "https://patrick.wagstrom.net/misc/atuin_versions.json"
-            return_content: yes
-            method: GET
-          register: atuin_versions_info
+#     - name: Conditionally download atuin binary
+#       block:
+#         - name: Fetch atuin versions info
+#           uri:
+#             url: "https://patrick.wagstrom.net/misc/atuin_versions.json"
+#             return_content: yes
+#             method: GET
+#           register: atuin_versions_info
       
-        - name: Parse and set the file name to download
-          set_fact:
-            atuin_binary_filename: "{{ (atuin_versions_info.json[ansible_architecture].versions[atuin_version]) }}"
+#         - name: Parse and set the file name to download
+#           set_fact:
+#             atuin_binary_filename: "{{ (atuin_versions_info.json[ansible_architecture].versions[atuin_version]) }}"
 
-        - name: Output the file to download
-          debug:
-            msg: "The file to download is {{ atuin_binary_filename }}"
+#         - name: Output the file to download
+#           debug:
+#             msg: "The file to download is {{ atuin_binary_filename }}"
 
-        - name: Download and install atuin binary to /usr/local/bin/atuin
-          get_url:
-            url: "https://patrick.wagstrom.net/misc/{{ atuin_binary_filename }}"
-            dest: "/usr/local/bin/atuin"
-            mode: '0755'
-          become: true
-      when: need_download | bool
-        
-
-  when: ansible_architecture == "armv7l" or ansible_architecture == "aarch64"
+#         - name: Download and install atuin binary to /usr/local/bin/atuin
+#           get_url:
+#             url: "https://patrick.wagstrom.net/misc/{{ atuin_binary_filename }}"
+#             dest: "/usr/local/bin/atuin"
+#             mode: '0755'
+#           become: true
+#       when: need_download | bool
+#   when: ansible_architecture == "armv7l" or ansible_architecture == "aarch64"
 
 - name: Install support for fish shell
   block:
@@ -143,9 +197,15 @@
       
   when: atuin_fish_install | bool
 
+- name: Check if atuin config file exists
+  stat:
+    path: "{{ ansible_env.HOME }}/.config/atuin/config.toml"
+  register: atuin_config_file
+
 - name: Invoke atuin to ensure there is a configuration file
   ansible.builtin.shell:
     cmd: atuin default-config
+  when: not atuin_config_file.stat.exists
 
 - name: Ensure sync_address is correctly set in atuin/config.toml
   ansible.builtin.lineinfile:
@@ -163,39 +223,7 @@
     state: present
   when: atuin_sync_address is defined and atuin_sync_address | length > 0
 
-# - name: Display Atuin Sync Login
-#   ansible.builtin.debug:
-#     msg: "Atuin Sync Login: {{ atuin_sync_login | default('Undefined') }}"
-
-# - name: Display Atuin Sync Username
-#   ansible.builtin.debug:
-#     msg: "Atuin Sync Username: {{ atuin_sync_username | default('Undefined') }}"
-    
-# - name: Display Atuin Sync Password
-#   ansible.builtin.debug:
-#     msg: "Atuin Sync Password: {{ atuin_sync_password_int | default('Undefined') }}"
-
-# - name: Display Atuin Sync Address
-#   ansible.builtin.debug:
-#     msg: "Atuin Sync Address: {{ atuin_sync_address | default('Undefined') }}"
-
-# - name: Display Atuin Sync Address
-#   ansible.builtin.debug:
-#     msg: "Atuin.Sync_Address: {{ atuin.sync_address | default('Undefined') }}"
-
-# - name: Display atuin_sync_int
-#   ansible.builtin.debug:
-#     msg: "atuin_sync_key_int: {{ atuin_sync_key_int | default('Undefined') }}"
-
-# - name: Display atuin_sync_key
-#   ansible.builtin.debug:
-#     msg: "atuin_sync_key: {{ atuin_sync_key | default('Undefined') }}"
-
-# - name: Display atuin.sync_key
-#   ansible.builtin.debug:
-#     msg: "atuin.sync_key: {{ atuin.sync_key | default('Undefined') }}"
-        
-- name: Set up synchornization
+- name: Set up Atuin synchornization
   ansible.builtin.command:
     argv:
       - "atuin"
@@ -207,35 +235,9 @@
       - "-k"
       - "{{ atuin_sync_key_int }}"
   when: atuin_sync_login | bool and atuin_sync_username | length > 0 and atuin_sync_password_int | length > 0 and atuin_sync_key_int | length > 0
-  
+
+
 - name: Install and Build Atuin Server on ARMv7l
+  import_tasks: atuin_server.yml
   when: atuin_server_install | bool and ansible_architecture == "armv7l"
-  block:
-    - name: Clone atuin-server-docker repository
-      ansible.builtin.git:
-        repo: 'https://github.com/pridkett/atuin-server-docker.git'
-        dest: "{{ atuin_server_dir }}"
-        clone: yes
-        update: yes
-
-    - name: Copy server.toml.j2 to Atuin server config directory
-      ansible.builtin.template:
-        src: templates/server.toml.j2
-        dest: "{{ atuin_server_dir }}/config/server.toml"
-
-    - name: Copy dotenv.j2 to Atuin server directory as .env
-      ansible.builtin.template:
-        src: templates/dotenv.j2
-        dest: "{{ atuin_server_dir}}/.env"
-        
-    - name: Run docker-compose build in Atuin server directory
-      ansible.builtin.shell:
-        cmd: docker-compose build
-        chdir: "{{ atuin_server_dir }}"
-      when: atuin_server_build | bool
-
-    - name: Start docker-compose stack
-      ansible.builtin.shell:
-        cmd: docker-compose up -d
-        chdir: "{{ atuin_server_dir }}"
-      when: atuin_server_start | bool
+  

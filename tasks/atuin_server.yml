@@ -1,0 +1,31 @@
+- name: Install and Build Atuin Server on ARMv7l
+  when: ansible_architecture == "armv7l"
+  block:
+    - name: Clone atuin-server-docker repository
+      ansible.builtin.git:
+        repo: 'https://github.com/pridkett/atuin-server-docker.git'
+        dest: "{{ atuin_server_dir }}"
+        clone: yes
+        update: yes
+
+    - name: Copy server.toml.j2 to Atuin server config directory
+      ansible.builtin.template:
+        src: templates/server.toml.j2
+        dest: "{{ atuin_server_dir }}/config/server.toml"
+
+    - name: Copy dotenv.j2 to Atuin server directory as .env
+      ansible.builtin.template:
+        src: templates/dotenv.j2
+        dest: "{{ atuin_server_dir}}/.env"
+        
+    - name: Run docker-compose build in Atuin server directory
+      ansible.builtin.shell:
+        cmd: docker-compose build
+        chdir: "{{ atuin_server_dir }}"
+      when: atuin_server_build | bool
+
+    - name: Start docker-compose stack
+      ansible.builtin.shell:
+        cmd: docker-compose up -d
+        chdir: "{{ atuin_server_dir }}"
+      when: atuin_server_start | bool

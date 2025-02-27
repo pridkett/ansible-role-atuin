@@ -89,7 +89,7 @@
 - name: Fail out if install was unsuccessful
   fail:
     msg: "Atuin installation was unsuccessful"
-  when: atuin_install_successful is defined and atuin_install_successful.failed
+  when: atuin_install_successful is defined and (atuin_install_successful.failed | default(False)) | bool
 
 # - name: Install Atuin on Linux x86/x86_64
 #   block:

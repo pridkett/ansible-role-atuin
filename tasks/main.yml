@@ -81,7 +81,10 @@
         url: "https://patrick.wagstrom.net/misc/{{ atuin_binary_filename }}"
         dest: "/usr/local/bin/atuin"
         mode: '0755'
+        # only reached when an upgrade is needed, so always replace the old binary
+        force: true
       become: true
+      register: atuin_fallback_install
 
   when: atuin_install_successful is defined and (atuin_install_successful.failed | default(False)) | bool and (ansible_facts['architecture'] == "armv7l" or ansible_facts['architecture'] == "aarch64")
 
@@ -92,7 +95,10 @@
 - name: Fail out if install was unsuccessful
   fail:
     msg: "Atuin installation was unsuccessful"
-  when: atuin_install_successful is defined and (atuin_install_successful.failed | default(False)) | bool
+  # The installer fails on 32-bit ARM by design; the fallback download covers that
+  when:
+    - atuin_install_successful is defined and (atuin_install_successful.failed | default(False)) | bool
+    - atuin_fallback_install is not defined or atuin_fallback_install is failed or atuin_fallback_install is skipped
 
 # - name: Install Atuin on Linux x86/x86_64
 #   block:

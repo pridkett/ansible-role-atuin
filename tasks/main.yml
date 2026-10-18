@@ -220,14 +220,16 @@
     line: "sync_address = \"{{ atuin_sync_address }}\""
     backrefs: yes
     state: present
-  when: atuin_sync_address is defined and atuin_sync_address | length > 0
+  # ansible-core 2.21 renders the empty template in vars/main.yml as None
+  when: atuin_sync_address | default('', true) | length > 0
 
 - name: Double ensure sync_address is correctly set in atuin/config.toml
   ansible.builtin.lineinfile:
     path: "{{ ansible_env.HOME }}/.config/atuin/config.toml"
     line: "sync_address = \"{{ atuin_sync_address }}\""
     state: present
-  when: atuin_sync_address is defined and atuin_sync_address | length > 0
+  # ansible-core 2.21 renders the empty template in vars/main.yml as None
+  when: atuin_sync_address | default('', true) | length > 0
 
 - name: Set up Atuin synchornization
   ansible.builtin.command:

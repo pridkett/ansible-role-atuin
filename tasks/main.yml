@@ -4,7 +4,7 @@
     - name: Install Atuin using Homebrew
       community.general.homebrew:
         name: atuin
-        state: present
+        state: latest
   when: ansible_facts['os_family'] == "Darwin"
 
 - name: Register version of curently installed copy of atuin
@@ -30,13 +30,16 @@
   block:
     - name: Download the Atuin install script
       get_url:
-        url: "https://github.com/atuinsh/atuin/releases/download/v18.4.0/atuin-installer.sh"
-        dest: "/tmp/atuin-install.sh"
+        url: "https://github.com/atuinsh/atuin/releases/download/v{{ atuin_version }}/atuin-installer.sh"
+        dest: "/tmp/atuin-installer-{{ atuin_version }}.sh"
         mode: '0755'
 
+    # The role copies the binary to /usr/local/bin, so the installer shouldn't edit shell rc files
     - name: Run the Atuin install script
       ansible.builtin.shell:
-        cmd: "/tmp/atuin-install.sh"
+        cmd: "/tmp/atuin-installer-{{ atuin_version }}.sh"
+      environment:
+        ATUIN_NO_MODIFY_PATH: "1"
       register: atuin_install_successful
       ignore_errors: true
       tags: install
